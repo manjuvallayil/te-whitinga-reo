@@ -73,13 +73,13 @@ def generate_response(user_text: str, detected_language: str = "mi") -> dict:
     tokenizer, model = _load_model()
 
     lang_context = (
-        "The user is speaking te reo Māori."
+        "The user is speaking te reo Māori. Respond in te reo Māori."
         if detected_language == "mi"
-        else "The user is speaking English."
+        else "The user is speaking English. You MUST respond in English. Use Māori terms only for culturally significant concepts that should not be translated (e.g., mana, kaitiaki, whakapapa). The rest of your response MUST be in English."
     )
 
     messages = [
-        {"role": "user", "content": f"{CULTURAL_SYSTEM_PROMPT}\n\n{lang_context}\n\nUser: {user_text}"},
+        {"role": "user", "content": f"{CULTURAL_SYSTEM_PROMPT}\n\nCRITICAL LANGUAGE INSTRUCTION: {lang_context}\n\nUser: {user_text}"},
     ]
 
     inputs = tokenizer.apply_chat_template(
