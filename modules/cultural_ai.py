@@ -55,6 +55,12 @@ def _parse_response(text: str) -> tuple[str, str, str]:
         justification = just_match.group(1).strip()
         remainder = remainder[just_match.end():].strip()
 
+    # Clean up artifacts from model output
+    # Remove "Line 3:" or "LINE 3:" prefixes
+    remainder = re.sub(r"(?i)^line\s*\d+:\s*", "", remainder).strip()
+    # Remove any remaining format artifacts
+    remainder = re.sub(r"(?i)^response:\s*", "", remainder).strip()
+
     return mode, justification, remainder
 
 
