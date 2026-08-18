@@ -24,13 +24,23 @@ MODE_ICONS = {
     "ESCALATE": "⚠️",
 }
 
+MODE_DESCRIPTIONS = {
+    "TRANSLATE": "Direct equivalence — safe to convert between languages",
+    "INTERPRET": "Cultural meaning requires contextual interpretation",
+    "EXPLAIN": "Audience needs cultural background to understand",
+    "PRESERVE": "Concept must remain in its original language",
+    "ESCALATE": "Requires authorised human cultural judgement",
+}
+
 
 def _build_mode_display(active_mode: str, justification: str) -> str:
     """Build HTML showing all modes with the active one highlighted."""
     lines = []
+    lines.append("<div style='margin-bottom: 1.5rem;'>")
+    lines.append("<p style='font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: #6b7280; margin-bottom: 0.75rem; font-weight: 600;'>Cultural Response Mode</p>")
     lines.append("<div style='display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;'>")
 
-    for mode, description in RESPONSE_MODES.items():
+    for mode in RESPONSE_MODES:
         color = MODE_COLORS[mode]
         icon = MODE_ICONS[mode]
         is_active = mode == active_mode
@@ -38,38 +48,79 @@ def _build_mode_display(active_mode: str, justification: str) -> str:
         if is_active:
             style = (
                 f"background: {color}; color: white; "
-                "padding: 0.4rem 0.8rem; border-radius: 0.5rem; "
-                "font-weight: 700; font-size: 0.85rem; "
-                "border: 2px solid transparent;"
+                "padding: 0.5rem 1rem; border-radius: 0.5rem; "
+                "font-weight: 700; font-size: 0.9rem; "
+                "box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);"
             )
         else:
             style = (
-                f"background: transparent; color: #9ca3af; "
-                "padding: 0.4rem 0.8rem; border-radius: 0.5rem; "
-                "font-weight: 400; font-size: 0.85rem; "
-                f"border: 1px solid #e5e7eb;"
+                "background: #f9fafb; color: #9ca3af; "
+                "padding: 0.5rem 1rem; border-radius: 0.5rem; "
+                "font-weight: 400; font-size: 0.9rem; "
+                "border: 1px solid #e5e7eb;"
             )
 
         lines.append(f"<span style='{style}'>{icon} {mode}</span>")
 
     lines.append("</div>")
 
-    # Justification note
-    if justification:
+    # Active mode description
+    if active_mode:
         active_color = MODE_COLORS.get(active_mode, "#374151")
+        mode_desc = MODE_DESCRIPTIONS.get(active_mode, "")
         lines.append(
-            f"<p style='color: {active_color}; font-size: 0.9rem; "
-            f"font-style: italic; margin: 0; padding: 0.5rem 0;'>"
-            f"↳ {justification}</p>"
+            f"<div style='background: #f9fafb; border-left: 3px solid {active_color}; "
+            f"padding: 0.75rem 1rem; border-radius: 0 0.5rem 0.5rem 0; margin-bottom: 0.75rem;'>"
+            f"<p style='color: {active_color}; font-weight: 600; font-size: 0.85rem; margin: 0 0 0.25rem 0;'>"
+            f"{MODE_ICONS[active_mode]} {active_mode}: {mode_desc}</p>"
         )
+        if justification:
+            lines.append(
+                f"<p style='color: #4b5563; font-size: 0.85rem; font-style: italic; margin: 0;'>"
+                f"↳ {justification}</p>"
+            )
+        lines.append("</div>")
 
+    lines.append("</div>")
     return "\n".join(lines)
+
+
+def _build_pipeline_status(stage: str) -> str:
+    """Build a visual pipeline indicator."""
+    stages = [
+        ("🎤", "Listen", "asr"),
+        ("🧠", "Decide", "decide"),
+        ("💬", "Respond", "respond"),
+        ("🔊", "Speak", "tts"),
+    ]
+    parts = []
+    parts.append("<div style='display: flex; align-items: center; gap: 0.25rem; margin-bottom: 1rem;'>")
+    for icon, label, key in stages:
+        is_active = key == stage
+        is_done = stages.index((icon, label, key)) < [s[2] for s in stages].index(stage) if stage else False
+        if is_active:
+            style = "background: #059669; color: white; padding: 0.3rem 0.6rem; border-radius: 1rem; font-size: 0.75rem; font-weight: 600;"
+        elif is_done:
+            style = "background: #d1fae5; color: #065f46; padding: 0.3rem 0.6rem; border-radius: 1rem; font-size: 0.75rem;"
+        else:
+            style = "background: #f3f4f6; color: #9ca3af; padding: 0.3rem 0.6rem; border-radius: 1rem; font-size: 0.75rem;"
+        parts.append(f"<span style='{style}'>{icon} {label}</span>")
+        if key != "tts":
+            parts.append("<span style='color: #d1d5db;'>→</span>")
+    parts.append("</div>")
+    return "".join(parts)
 
 
 def process_audio(audio):
     """Full pipeline: ASR -> Cultural AI -> TTS."""
     if audio is None:
-        return "No audio recorded.", "", "", None
+        return (
+            "<p style='color: #dc2626; font-size: 0.9rem;'>No audio recorded. Please record your voice first.</p>",
+            "",
+            "",
+            "",
+            None,
+        )
 
     sample_rate, audio_array = audio
 
@@ -90,7 +141,7 @@ def process_audio(audio):
     # Step 1: ASR
     asr_result = transcribe(audio_array, sample_rate=16000)
     lang_display = "te reo Māori" if asr_result["language"] == "mi" else "English"
-    transcription_text = f"{asr_result['text']}\n\n[Detected: {lang_display}]"
+    transcription_text = f"**{lang_display}:** {asr_result['text']}"
 
     # Step 2: Cultural AI
     ai_result = generate_response(asr_result["text"], asr_result["language"])
@@ -100,17 +151,38 @@ def process_audio(audio):
     # Build mode display HTML
     mode_html = _build_mode_display(mode, justification)
 
+    # Build pipeline status
+    pipeline_html = _build_pipeline_status("tts")
+
     # Step 3: TTS
     tts_lang = "mi" if asr_result["language"] == "mi" else "en"
     audio_out, out_sr = synthesize(ai_result["text"], language=tts_lang)
 
-    return transcription_text, mode_html, ai_result["text"], (out_sr, audio_out)
+    return pipeline_html, mode_html, ai_result["text"], transcription_text, (out_sr, audio_out)
 
+
+# --- Default mode display (all inactive) ---
+DEFAULT_MODE_HTML = """
+<div style='margin-bottom: 1.5rem;'>
+<p style='font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: #6b7280; margin-bottom: 0.75rem; font-weight: 600;'>Cultural Response Mode</p>
+<div style='display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;'>
+<span style='background: #f9fafb; color: #9ca3af; padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.9rem; border: 1px solid #e5e7eb;'>🔄 TRANSLATE</span>
+<span style='background: #f9fafb; color: #9ca3af; padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.9rem; border: 1px solid #e5e7eb;'>🌊 INTERPRET</span>
+<span style='background: #f9fafb; color: #9ca3af; padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.9rem; border: 1px solid #e5e7eb;'>💡 EXPLAIN</span>
+<span style='background: #f9fafb; color: #9ca3af; padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.9rem; border: 1px solid #e5e7eb;'>🛡️ PRESERVE</span>
+<span style='background: #f9fafb; color: #9ca3af; padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.9rem; border: 1px solid #e5e7eb;'>⚠️ ESCALATE</span>
+</div>
+<p style='color: #9ca3af; font-size: 0.85rem; font-style: italic;'>Awaiting input — the AI will determine the culturally appropriate response mode.</p>
+</div>
+"""
 
 # --- Gradio UI ---
 css = """
-.main-title { text-align: center; margin-bottom: 0.2rem; }
-.subtitle { text-align: center; color: #6b7280; font-size: 0.95rem; margin-bottom: 1.5rem; }
+.main-header { text-align: center; padding: 1.5rem 0 0.5rem; }
+.main-header h1 { font-size: 2rem; color: #1f2937; margin: 0; }
+.main-header .tagline { color: #6b7280; font-size: 0.95rem; margin-top: 0.25rem; }
+.main-header .desc { color: #9ca3af; font-size: 0.8rem; margin-top: 0.5rem; max-width: 600px; margin-left: auto; margin-right: auto; }
+footer { display: none !important; }
 """
 
 with gr.Blocks(
@@ -119,48 +191,54 @@ with gr.Blocks(
     theme=gr.themes.Soft(primary_hue="green", neutral_hue="gray"),
 ) as demo:
 
-    gr.Markdown(
-        "<h1 class='main-title'>Te Whitinga Reo</h1>"
-        "<p class='subtitle'>Sovereign Culturally Intelligent AI</p>"
+    # Header
+    gr.HTML("""
+    <div class="main-header">
+        <h1>Te Whitinga Reo</h1>
+        <p class="tagline">Sovereign Culturally Intelligent AI</p>
+        <p class="desc">Speak in te reo Māori or English. The AI determines whether to translate, interpret, explain, preserve, or escalate — based on cultural context, meaning, and sensitivity.</p>
+    </div>
+    """)
+
+    # Pipeline status
+    pipeline_display = gr.HTML(
+        value=_build_pipeline_status(""),
+        show_label=False,
     )
 
-    with gr.Row():
-        with gr.Column(scale=1):
+    # Main layout: Input left, Decision + Response right
+    with gr.Row(equal_height=False):
+        with gr.Column(scale=2, min_width=300):
             audio_input = gr.Audio(
                 label="Kōrero mai / Speak",
                 sources=["microphone"],
                 type="numpy",
             )
-            submit_btn = gr.Button("Process", variant="primary", size="lg")
+            submit_btn = gr.Button(
+                "Process",
+                variant="primary",
+                size="lg",
+                interactive=True,
+            )
+            # Collapsible transcription
+            with gr.Accordion("Transcription", open=False):
+                transcription_output = gr.Markdown(
+                    value="*Transcription will appear here after processing.*",
+                )
 
-        with gr.Column(scale=1):
-            transcription_output = gr.Textbox(
-                label="Transcription",
-                lines=3,
-                interactive=False,
-            )
-            mode_output = gr.HTML(
-                label="Cultural Response Mode",
-                value=(
-                    "<div style='display: flex; flex-wrap: wrap; gap: 0.5rem;'>"
-                    "<span style='background: transparent; color: #9ca3af; padding: 0.4rem 0.8rem; "
-                    "border-radius: 0.5rem; font-size: 0.85rem; border: 1px solid #e5e7eb;'>🔄 TRANSLATE</span>"
-                    "<span style='background: transparent; color: #9ca3af; padding: 0.4rem 0.8rem; "
-                    "border-radius: 0.5rem; font-size: 0.85rem; border: 1px solid #e5e7eb;'>🌊 INTERPRET</span>"
-                    "<span style='background: transparent; color: #9ca3af; padding: 0.4rem 0.8rem; "
-                    "border-radius: 0.5rem; font-size: 0.85rem; border: 1px solid #e5e7eb;'>💡 EXPLAIN</span>"
-                    "<span style='background: transparent; color: #9ca3af; padding: 0.4rem 0.8rem; "
-                    "border-radius: 0.5rem; font-size: 0.85rem; border: 1px solid #e5e7eb;'>🛡️ PRESERVE</span>"
-                    "<span style='background: transparent; color: #9ca3af; padding: 0.4rem 0.8rem; "
-                    "border-radius: 0.5rem; font-size: 0.85rem; border: 1px solid #e5e7eb;'>⚠️ ESCALATE</span>"
-                    "</div>"
-                ),
-            )
+        with gr.Column(scale=3, min_width=400):
+            # Cultural Decision Area — the hero
+            mode_display = gr.HTML(value=DEFAULT_MODE_HTML)
+
+            # Response
             response_output = gr.Textbox(
                 label="Response",
-                lines=5,
+                lines=4,
                 interactive=False,
+                placeholder="The AI's culturally informed response will appear here...",
             )
+
+            # Audio playback
             audio_output = gr.Audio(
                 label="Audio Response",
                 type="numpy",
@@ -170,13 +248,16 @@ with gr.Blocks(
     submit_btn.click(
         fn=process_audio,
         inputs=[audio_input],
-        outputs=[transcription_output, mode_output, response_output, audio_output],
+        outputs=[pipeline_display, mode_display, response_output, transcription_output, audio_output],
     )
 
-    gr.Markdown(
-        "<p style='text-align: center; color: #9ca3af; font-size: 0.8rem; margin-top: 2rem;'>"
-        "Te Whitinga Reo — Adaptive AI for Cultural Communication</p>"
-    )
+    # Footer
+    gr.HTML("""
+    <div style='text-align: center; padding: 1.5rem 0 0.5rem; border-top: 1px solid #e5e7eb; margin-top: 2rem;'>
+        <p style='color: #9ca3af; font-size: 0.75rem; margin: 0;'>Te Whitinga Reo — Adaptive AI for Global Communication, Commerce and Cultural Exchange</p>
+        <p style='color: #d1d5db; font-size: 0.7rem; margin-top: 0.25rem;'>Sovereign Culturally Intelligent Agentic AI | Aotearoa New Zealand</p>
+    </div>
+    """)
 
 if __name__ == "__main__":
     demo.launch()
