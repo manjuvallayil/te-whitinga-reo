@@ -35,15 +35,27 @@ def _load_model():
     return _tokenizer, _model
 
 
-def _parse_mode(text: str) -> tuple[str, str]:
-    """Extract the response mode and clean text."""
-    pattern = r"\[(TRANSLATE|INTERPRET|EXPLAIN|PRESERVE|ESCALATE)\]"
-    match = re.search(pattern, text)
+def _parse_response(text: str) -> tuple[str, str, str]:
+    """Extract mode, justification, and clean response text."""
+    # Extract mode
+    mode_pattern = r"\[(TRANSLATE|INTERPRET|EXPLAIN|PRESERVE|ESCALATE)\]"
+    match = re.search(mode_pattern, text)
     if match:
         mode = match.group(1)
-        clean_text = text[match.end():].strip()
-        return mode, clean_text
-    return "INTERPRET", text.strip()
+        remainder = text[match.end():].strip()
+    else:
+        mode = "INTERPRET"
+        remainder = text.strip()
+
+    # Extract justification
+    justification = ""
+    just_pattern = r"(?i)JUSTIFICATION:\s*(.+?)(?:\n|$)"
+    just_match = re.search(just_pattern, remainder)
+    if just_match:
+        justification = just_match.group(1).strip()
+        remainder = remainder[just_match.end():].strip()
+
+    return mode, justification, remainder
 
 
 @spaces.GPU
@@ -82,11 +94,12 @@ def generate_response(user_text: str, detected_language: str = "mi") -> dict:
     generated_ids = outputs[0][inputs["input_ids"].shape[1]:]
     response_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
 
-    mode, clean_text = _parse_mode(response_text)
+    mode, justification, clean_text = _parse_response(response_text)
 
     return {
         "mode": mode,
         "mode_description": RESPONSE_MODES.get(mode, ""),
+        "justification": justification,
         "text": clean_text,
         "raw": response_text,
     }

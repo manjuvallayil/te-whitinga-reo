@@ -9,16 +9,65 @@ from modules.cultural_ai import generate_response, RESPONSE_MODES
 from modules.tts import synthesize, TTS_SAMPLE_RATE
 
 MODE_COLORS = {
-    "TRANSLATE": "#065f46",
-    "INTERPRET": "#1e40af",
-    "EXPLAIN": "#92400e",
-    "PRESERVE": "#5b21b6",
-    "ESCALATE": "#991b1b",
+    "TRANSLATE": "#059669",
+    "INTERPRET": "#2563eb",
+    "EXPLAIN": "#d97706",
+    "PRESERVE": "#7c3aed",
+    "ESCALATE": "#dc2626",
+}
+
+MODE_ICONS = {
+    "TRANSLATE": "🔄",
+    "INTERPRET": "🌊",
+    "EXPLAIN": "💡",
+    "PRESERVE": "🛡️",
+    "ESCALATE": "⚠️",
 }
 
 
+def _build_mode_display(active_mode: str, justification: str) -> str:
+    """Build HTML showing all modes with the active one highlighted."""
+    lines = []
+    lines.append("<div style='display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;'>")
+
+    for mode, description in RESPONSE_MODES.items():
+        color = MODE_COLORS[mode]
+        icon = MODE_ICONS[mode]
+        is_active = mode == active_mode
+
+        if is_active:
+            style = (
+                f"background: {color}; color: white; "
+                "padding: 0.4rem 0.8rem; border-radius: 0.5rem; "
+                "font-weight: 700; font-size: 0.85rem; "
+                "border: 2px solid transparent;"
+            )
+        else:
+            style = (
+                f"background: transparent; color: #9ca3af; "
+                "padding: 0.4rem 0.8rem; border-radius: 0.5rem; "
+                "font-weight: 400; font-size: 0.85rem; "
+                f"border: 1px solid #e5e7eb;"
+            )
+
+        lines.append(f"<span style='{style}'>{icon} {mode}</span>")
+
+    lines.append("</div>")
+
+    # Justification note
+    if justification:
+        active_color = MODE_COLORS.get(active_mode, "#374151")
+        lines.append(
+            f"<p style='color: {active_color}; font-size: 0.9rem; "
+            f"font-style: italic; margin: 0; padding: 0.5rem 0;'>"
+            f"↳ {justification}</p>"
+        )
+
+    return "\n".join(lines)
+
+
 def process_audio(audio):
-    """Full pipeline: ASR → Cultural AI → TTS."""
+    """Full pipeline: ASR -> Cultural AI -> TTS."""
     if audio is None:
         return "No audio recorded.", "", "", None
 
@@ -46,21 +95,22 @@ def process_audio(audio):
     # Step 2: Cultural AI
     ai_result = generate_response(asr_result["text"], asr_result["language"])
     mode = ai_result["mode"]
-    mode_desc = ai_result["mode_description"]
-    response_text = f"[{mode}] {mode_desc}\n\n{ai_result['text']}"
+    justification = ai_result.get("justification", "")
+
+    # Build mode display HTML
+    mode_html = _build_mode_display(mode, justification)
 
     # Step 3: TTS
     tts_lang = "mi" if asr_result["language"] == "mi" else "en"
     audio_out, out_sr = synthesize(ai_result["text"], language=tts_lang)
 
-    return transcription_text, response_text, mode, (out_sr, audio_out)
+    return transcription_text, mode_html, ai_result["text"], (out_sr, audio_out)
 
 
 # --- Gradio UI ---
 css = """
-.main-title { text-align: center; margin-bottom: 0.5rem; }
+.main-title { text-align: center; margin-bottom: 0.2rem; }
 .subtitle { text-align: center; color: #6b7280; font-size: 0.95rem; margin-bottom: 1.5rem; }
-.mode-badge { font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
 """
 
 with gr.Blocks(
@@ -89,10 +139,22 @@ with gr.Blocks(
                 lines=3,
                 interactive=False,
             )
-            mode_output = gr.Textbox(
-                label="Response Mode",
-                lines=1,
-                interactive=False,
+            mode_output = gr.HTML(
+                label="Cultural Response Mode",
+                value=(
+                    "<div style='display: flex; flex-wrap: wrap; gap: 0.5rem;'>"
+                    "<span style='background: transparent; color: #9ca3af; padding: 0.4rem 0.8rem; "
+                    "border-radius: 0.5rem; font-size: 0.85rem; border: 1px solid #e5e7eb;'>🔄 TRANSLATE</span>"
+                    "<span style='background: transparent; color: #9ca3af; padding: 0.4rem 0.8rem; "
+                    "border-radius: 0.5rem; font-size: 0.85rem; border: 1px solid #e5e7eb;'>🌊 INTERPRET</span>"
+                    "<span style='background: transparent; color: #9ca3af; padding: 0.4rem 0.8rem; "
+                    "border-radius: 0.5rem; font-size: 0.85rem; border: 1px solid #e5e7eb;'>💡 EXPLAIN</span>"
+                    "<span style='background: transparent; color: #9ca3af; padding: 0.4rem 0.8rem; "
+                    "border-radius: 0.5rem; font-size: 0.85rem; border: 1px solid #e5e7eb;'>🛡️ PRESERVE</span>"
+                    "<span style='background: transparent; color: #9ca3af; padding: 0.4rem 0.8rem; "
+                    "border-radius: 0.5rem; font-size: 0.85rem; border: 1px solid #e5e7eb;'>⚠️ ESCALATE</span>"
+                    "</div>"
+                ),
             )
             response_output = gr.Textbox(
                 label="Response",
@@ -108,7 +170,7 @@ with gr.Blocks(
     submit_btn.click(
         fn=process_audio,
         inputs=[audio_input],
-        outputs=[transcription_output, response_output, mode_output, audio_output],
+        outputs=[transcription_output, mode_output, response_output, audio_output],
     )
 
     gr.Markdown(
