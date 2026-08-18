@@ -3,8 +3,8 @@ title: Te Whitinga Reo
 emoji: 🌿
 colorFrom: green
 colorTo: indigo
-sdk: streamlit
-sdk_version: "1.37.0"
+sdk: gradio
+sdk_version: "5.0.0"
 app_file: app.py
 pinned: false
 hardware: zero-a10g
@@ -60,14 +60,13 @@ User speaks (Māori or English)
 
 ```
 te-whitinga-reo/
-├── app.py                    # Main Streamlit application
+├── app.py                    # Main Gradio application
 ├── config.py                 # Model IDs, cultural system prompt, settings
 ├── modules/
 │   ├── asr.py                # Speech recognition (Whisper-small-mi)
 │   ├── cultural_ai.py        # Generative AI with cultural decision framework
 │   └── tts.py                # Text-to-speech (OmniVoice)
-├── requirements.txt          # Python dependencies
-└── .streamlit/config.toml    # UI theme configuration
+└── requirements.txt          # Python dependencies
 ```
 
 ## Deployment
