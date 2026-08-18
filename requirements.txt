@@ -6,5 +6,5 @@ numpy
 scipy
 soundfile
 librosa
-omnivoice
+edge-tts
 spaces
